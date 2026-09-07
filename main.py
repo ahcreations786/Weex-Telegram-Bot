@@ -17,6 +17,21 @@ if not TOKEN:
     logger.error("No TELEGRAM_BOT_TOKEN environment variable found!")
     sys.exit("Error: TELEGRAM_BOT_TOKEN missing.")
 
+# Coin Mapping for Public API
+COIN_MAP = {
+    "BTC": "bitcoin",
+    "ETH": "ethereum",
+    "SOL": "solana",
+    "BNB": "binancecoin",
+    "XRP": "ripple",
+    "ADA": "cardano",
+    "DOGE": "dogecoin",
+    "DOT": "polkadot",
+    "MATIC": "matic-network",
+    "LTC": "litecoin",
+    "ZEN": "horizen"
+}
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     msg = (
@@ -32,7 +47,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "🤖 **Bot Command Menu:**\n\n"
         "• `/start` - Bot start karein\n"
         "• `/help` - Help menu\n"
-        "• `/d [coin]` - Price dekhein (e.g. `/d btc`, `/d zen`)\n"
+        "• `/d [coin]` - Price dekhein (e.g. `/d btc`, `/d zen`, `/d eth`)\n"
     )
     await update.message.reply_text(msg, parse_mode='Markdown')
 
@@ -41,32 +56,39 @@ async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text("Sahi tareeqah: `/d btc`", parse_mode='Markdown')
         return
     
-    coin = context.args[0].strip().upper()
-    clean_coin = coin.replace("USDT", "")
-    symbol_pair = f"{clean_coin}USDT"
+    coin = context.args[0].strip().upper().replace("USDT", "")
+    coin_id = COIN_MAP.get(coin, coin.lower())
+    
+    price_usd = None
 
-    binance_price = None
-
-    # Reliable Market Fetching
+    # Primary: CoinGecko API (No IP restrictions on GitHub Actions)
     try:
-        url_binance = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol_pair}"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        res = requests.get(url_binance, headers=headers, timeout=5)
-        if res.status_code == 200:
-            data = res.json()
-            if "price" in data:
-                raw_p = float(data["price"])
-                binance_price = f"{raw_p:,.4f}".rstrip('0').rstrip('.')
+        url_cg = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd"
+        res_cg = requests.get(url_cg, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5).json()
+        if coin_id in res_cg and "usd" in res_cg[coin_id]:
+            raw_val = res_cg[coin_id]["usd"]
+            price_usd = f"{raw_val:,.4f}".rstrip('0').rstrip('.')
     except Exception as e:
-        logger.error(f"Market API Error: {e}")
+        logger.error(f"CoinGecko Error: {e}")
 
-    if not binance_price:
-        await update.message.reply_text(f"❌ Symbol **{symbol_pair}** ka data nahi mila.", parse_mode='Markdown')
+    # Backup: CryptoCompare API
+    if not price_usd:
+        try:
+            url_cc = f"https://min-api.cryptocompare.com/data/price?fsym={coin}&tsyms=USD"
+            res_cc = requests.get(url_cc, timeout=5).json()
+            if "USD" in res_cc:
+                raw_val = res_cc["USD"]
+                price_usd = f"{raw_val:,.4f}".rstrip('0').rstrip('.')
+        except Exception as e:
+            logger.error(f"CryptoCompare Error: {e}")
+
+    if not price_usd:
+        await update.message.reply_text(f"❌ Symbol **{coin}USDT** ka data nahi mila.", parse_mode='Markdown')
         return
 
     msg = (
-        f"📊 **{symbol_pair} Market Price**\n\n"
-        f"• **Live Price:** ${binance_price}\n"
+        f"📊 **{coin}/USDT Market Price**\n\n"
+        f"• **Live Price:** ${price_usd}\n"
     )
 
     await update.message.reply_text(msg, parse_mode='Markdown')
@@ -83,4 +105,4 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-    
+        
