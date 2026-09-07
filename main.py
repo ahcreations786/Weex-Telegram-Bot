@@ -45,40 +45,44 @@ async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     clean_coin = coin.replace("USDT", "")
     symbol_pair = f"{clean_coin}USDT"
 
-    weex_price = None
     binance_price = None
+    weex_price = None
 
-    # WEEX Official Spot Endpoint
-    try:
-        url_weex = f"https://api-spot.weex.com/api/v1/market/ticker?symbol={symbol_pair}"
-        res_weex = requests.get(url_weex, timeout=5).json()
-        if isinstance(res_weex, dict) and "data" in res_weex:
-            data = res_weex["data"]
-            if isinstance(data, dict):
-                weex_price = data.get("last") or data.get("close")
-        elif isinstance(res_weex, list) and len(res_weex) > 0:
-            weex_price = res_weex[0].get("lastPrice")
-    except Exception as e:
-        logger.error(f"WEEX Spot API Error: {e}")
-
-    # Binance Public API
+    # Binance Public Ticker API
     try:
         url_binance = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol_pair}"
-        res_binance = requests.get(url_binance, timeout=5).json()
-        if "price" in res_binance:
-            binance_price = str(round(float(res_binance["price"]), 4))
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        res = requests.get(url_binance, headers=headers, timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            if "price" in data:
+                raw_p = float(data["price"])
+                binance_price = f"{raw_p:,.4f}".rstrip('0').rstrip('.')
     except Exception as e:
         logger.error(f"Binance API Error: {e}")
 
-    if not weex_price and not binance_price:
+    # WEEX API Check
+    try:
+        url_weex = f"https://api.weex.com/api/v1/market/ticker?symbol=cmt_{clean_coin.lower()}usdt"
+        res_w = requests.get(url_weex, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
+        if res_w.status_code == 200 and res_w.headers.get('content-type', '').startswith('application/json'):
+            w_data = res_w.json()
+            if w_data.get("code") == "00000" and "data" in w_data:
+                weex_price = w_data["data"].get("last")
+    except Exception as e:
+        logger.error(f"WEEX API Error: {e}")
+
+    if not binance_price and not weex_price:
         await update.message.reply_text(f"❌ Symbol **{symbol_pair}** ka data nahi mila.", parse_mode='Markdown')
         return
 
     msg = f"📊 **{symbol_pair} Market Price**\n\n"
-    if weex_price:
-        msg += f"• **WEEX:** ${weex_price}\n"
     if binance_price:
         msg += f"• **Binance:** ${binance_price}\n"
+    if weex_price:
+        msg += f"• **WEEX:** ${weex_price}\n"
+    elif binance_price:
+        msg += f"• **WEEX:** ${binance_price} *(Estimated)*\n"
 
     await update.message.reply_text(msg, parse_mode='Markdown')
 
@@ -94,4 +98,4 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-    
+        
