@@ -46,9 +46,8 @@ async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     symbol_pair = f"{clean_coin}USDT"
 
     binance_price = None
-    weex_price = None
 
-    # Binance Public Ticker API
+    # Reliable Market Fetching
     try:
         url_binance = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol_pair}"
         headers = {'User-Agent': 'Mozilla/5.0'}
@@ -59,30 +58,16 @@ async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 raw_p = float(data["price"])
                 binance_price = f"{raw_p:,.4f}".rstrip('0').rstrip('.')
     except Exception as e:
-        logger.error(f"Binance API Error: {e}")
+        logger.error(f"Market API Error: {e}")
 
-    # WEEX API Check
-    try:
-        url_weex = f"https://api.weex.com/api/v1/market/ticker?symbol=cmt_{clean_coin.lower()}usdt"
-        res_w = requests.get(url_weex, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
-        if res_w.status_code == 200 and res_w.headers.get('content-type', '').startswith('application/json'):
-            w_data = res_w.json()
-            if w_data.get("code") == "00000" and "data" in w_data:
-                weex_price = w_data["data"].get("last")
-    except Exception as e:
-        logger.error(f"WEEX API Error: {e}")
-
-    if not binance_price and not weex_price:
+    if not binance_price:
         await update.message.reply_text(f"❌ Symbol **{symbol_pair}** ka data nahi mila.", parse_mode='Markdown')
         return
 
-    msg = f"📊 **{symbol_pair} Market Price**\n\n"
-    if binance_price:
-        msg += f"• **Binance:** ${binance_price}\n"
-    if weex_price:
-        msg += f"• **WEEX:** ${weex_price}\n"
-    elif binance_price:
-        msg += f"• **WEEX:** ${binance_price} *(Estimated)*\n"
+    msg = (
+        f"📊 **{symbol_pair} Market Price**\n\n"
+        f"• **Live Price:** ${binance_price}\n"
+    )
 
     await update.message.reply_text(msg, parse_mode='Markdown')
 
@@ -98,4 +83,4 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-        
+    
