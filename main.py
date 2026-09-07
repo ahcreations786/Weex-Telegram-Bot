@@ -65,7 +65,7 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_command))
 
     # Register Message Handler (Echo non-command messages)
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
+    
 
     # Run the bot until Ctrl-C is pressed
     logger.info("Bot is starting polling...")
