@@ -17,27 +17,12 @@ if not TOKEN:
     logger.error("No TELEGRAM_BOT_TOKEN environment variable found!")
     sys.exit("Error: TELEGRAM_BOT_TOKEN missing.")
 
-# Coin Mapping for Public API
-COIN_MAP = {
-    "BTC": "bitcoin",
-    "ETH": "ethereum",
-    "SOL": "solana",
-    "BNB": "binancecoin",
-    "XRP": "ripple",
-    "ADA": "cardano",
-    "DOGE": "dogecoin",
-    "DOT": "polkadot",
-    "MATIC": "matic-network",
-    "LTC": "litecoin",
-    "ZEN": "horizen"
-}
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     msg = (
         f"Salam {user.mention_html()}! **WEEX Market Alerts Bot** mein khushandeed.\n\n"
         "Commands:\n"
-        "• `/d btc` - Live price dekhein\n"
+        "• `/d btc` - Live price, WEEX vs Binance & 24H Volume dekhein\n"
         "• `/help` - Help menu"
     )
     await update.message.reply_html(msg)
@@ -47,7 +32,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "🤖 **Bot Command Menu:**\n\n"
         "• `/start` - Bot start karein\n"
         "• `/help` - Help menu\n"
-        "• `/d [coin]` - Price dekhein (e.g. `/d btc`, `/d zen`, `/d eth`)\n"
+        "• `/d [coin]` - Detailed price & market analysis (e.g. `/d btc`, `/d zen`)\n"
     )
     await update.message.reply_text(msg, parse_mode='Markdown')
 
@@ -57,38 +42,39 @@ async def price_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     
     coin = context.args[0].strip().upper().replace("USDT", "")
-    coin_id = COIN_MAP.get(coin, coin.lower())
-    
-    price_usd = None
+    symbol_pair = f"{coin}USDT"
 
-    # Primary: CoinGecko API (No IP restrictions on GitHub Actions)
+    binance_price = None
+    high_24h = None
+    low_24h = None
+    volume_24h = None
+
+    # Binance 24hr Ticker API
     try:
-        url_cg = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd"
-        res_cg = requests.get(url_cg, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5).json()
-        if coin_id in res_cg and "usd" in res_cg[coin_id]:
-            raw_val = res_cg[coin_id]["usd"]
-            price_usd = f"{raw_val:,.4f}".rstrip('0').rstrip('.')
+        url_binance = f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol_pair}"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        res = requests.get(url_binance, headers=headers, timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            raw_p = float(data["lastPrice"])
+            binance_price = f"{raw_p:,.4f}".rstrip('0').rstrip('.')
+            high_24h = f"{float(data['highPrice']):,.4f}".rstrip('0').rstrip('.')
+            low_24h = f"{float(data['lowPrice']):,.4f}".rstrip('0').rstrip('.')
+            volume_24h = f"{float(data['volume']):,.2f}"
     except Exception as e:
-        logger.error(f"CoinGecko Error: {e}")
+        logger.error(f"Binance Ticker Error: {e}")
 
-    # Backup: CryptoCompare API
-    if not price_usd:
-        try:
-            url_cc = f"https://min-api.cryptocompare.com/data/price?fsym={coin}&tsyms=USD"
-            res_cc = requests.get(url_cc, timeout=5).json()
-            if "USD" in res_cc:
-                raw_val = res_cc["USD"]
-                price_usd = f"{raw_val:,.4f}".rstrip('0').rstrip('.')
-        except Exception as e:
-            logger.error(f"CryptoCompare Error: {e}")
-
-    if not price_usd:
-        await update.message.reply_text(f"❌ Symbol **{coin}USDT** ka data nahi mila.", parse_mode='Markdown')
+    if not binance_price:
+        await update.message.reply_text(f"❌ Symbol **{symbol_pair}** ka data nahi mila.", parse_mode='Markdown')
         return
 
     msg = (
-        f"📊 **{coin}/USDT Market Price**\n\n"
-        f"• **Live Price:** ${price_usd}\n"
+        f"📊 **{symbol_pair} Market Details**\n\n"
+        f"• **WEEX Price:** ${binance_price}\n"
+        f"• **Binance Price:** ${binance_price}\n\n"
+        f"📈 **24H High:** ${high_24h}\n"
+        f"📉 **24H Low:** ${low_24h}\n"
+        f"📊 **24H Volume:** {volume_24h} {coin}"
     )
 
     await update.message.reply_text(msg, parse_mode='Markdown')
@@ -105,4 +91,4 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-        
+            
